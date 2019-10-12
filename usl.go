@@ -48,8 +48,6 @@ func Fit(points [][2]float64) (Model, error) {
 
 	settings := optimize.Settings{
 		Converger: &optimize.FunctionConverge{
-			Absolute:   0.1,
-			Relative:   0.1,
 			Iterations: 5000,
 		},
 	}
