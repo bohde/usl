@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"gonum.org/v1/gonum/optimize"
+	"gonum.org/v1/gonum/stat"
 )
 
 type Model struct {
@@ -26,6 +27,17 @@ func (m Model) MaxThroughput() float64 {
 }
 
 func Fit(points [][2]float64) (Model, error) {
+	ys := make([]float64, len(points))
+	xs := make([]float64, len(points))
+
+	max := 0.0
+
+	for i := range points {
+		xs[i] = points[i][0]
+		ys[i] = points[i][1]
+		max = math.Max(ys[i]/xs[i], max)
+	}
+
 	problem := optimize.Problem{
 		Func: func(x []float64) float64 {
 			ssRes := 0.0
@@ -35,11 +47,21 @@ func Fit(points [][2]float64) (Model, error) {
 				Lambda: x[2],
 			}
 
-			for i := range points {
-				actualY := points[i][1]
-				testY := m.Throughput(points[i][0])
-				err := testY - actualY
-				ssRes += err * err
+			// Check minimum bounds
+			if m.Sigma < 0 || m.Kappa < 0 || m.Lambda < 0 {
+				return math.MaxFloat64
+			}
+
+			// Check maximum bounds
+			if m.Sigma > 1 || m.Kappa > 1 {
+				return math.MaxFloat64
+			}
+
+			for i := range ys {
+				actualY := ys[i]
+				testY := m.Throughput(xs[i])
+				err := (testY - actualY)
+				ssRes += (err * err)
 			}
 
 			return ssRes
@@ -52,21 +74,16 @@ func Fit(points [][2]float64) (Model, error) {
 		},
 	}
 
-	result, err := optimize.Minimize(problem, []float64{0.01, 0.1, 1000}, &settings, &optimize.NelderMead{})
+	result, err := optimize.Minimize(problem, []float64{0.01, 0.1, max}, &settings, &optimize.NelderMead{})
 	if err != nil && err != optimize.ErrLinesearcherFailure {
 		return Model{}, err
 	}
 
-	sum := float64(0)
-	for i := range points {
-		sum += points[i][1]
-	}
-
-	mean := sum / float64(len(points))
+	mean := stat.Mean(ys, nil)
 
 	ss := float64(0)
-	for i := range points {
-		v := points[i][1] - mean
+	for i := range ys {
+		v := ys[i] - mean
 		ss += (v * v)
 	}
 
